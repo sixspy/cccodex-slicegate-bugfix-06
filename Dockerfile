@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --tru
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY tests/ ./tests/
+COPY docs/ ./docs/
 COPY pytest.ini .
 
 RUN mkdir -p /app/data

@@ -6,33 +6,49 @@
 <title>日切放行</title>
 <script src="/static/vue.global.prod.js"></script>
 <style>
-  :root{--bg:#0b1220;--panel:#121a2b;--line:#243049;--text:#e8eefc;--muted:#93a0b8;--ok:#3ddc97;--bad:#ff6b6b;--accent:#4cc9f0}
+  :root{--bg:#0b1220;--panel:#121a2b;--line:#243049;--text:#e8eefc;--muted:#93a0b8;--ok:#3ddc97;--bad:#ff6b6b;--warn:#f4b942;--accent:#4cc9f0}
   *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
   .top{display:flex;align-items:center;gap:18px;padding:14px 20px;border-bottom:1px solid var(--line);background:#0e1626}
   .brand{font-weight:700;letter-spacing:.08em;font-size:18px}
   .brand small{display:block;color:var(--muted);font-weight:400;font-size:11px;letter-spacing:.02em;margin-top:2px}
-  .tabs{display:flex;gap:6px;flex:1}
+  .tabs{display:flex;gap:6px;flex:1;flex-wrap:wrap}
   .tabs button{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 12px;border-radius:999px;cursor:pointer}
   .tabs button.on{color:var(--text);border-color:var(--line);background:#18233a}
   .user{color:var(--muted);font-size:13px}
   .ghost{background:#18233a;border:1px solid var(--line);color:var(--text);padding:7px 10px;border-radius:8px;cursor:pointer}
+  .ghost:disabled{opacity:.45;cursor:not-allowed}
   main{padding:18px 20px 28px}
   .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
-  h2{margin:0 0 10px;font-size:15px;color:#c9d4ea}
+  .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+  h2{margin:0 0 10px;font-size:15px;color:#c9d4ea;display:flex;align-items:center;gap:8px}
+  h2 .hint{font-weight:400;font-size:11px;color:var(--muted)}
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
   th{color:var(--muted);font-weight:600}
-  input,select{width:100%;background:#0b1220;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;margin:4px 0 10px}
+  input,select,textarea{width:100%;background:#0b1220;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;margin:4px 0 10px;font-family:inherit}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .primary{background:var(--accent);color:#041018;border:0;padding:9px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+  .primary:disabled{opacity:.5;cursor:not-allowed}
   .mono{font-family:Consolas,"Courier New",monospace}
-  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#1b2a22;color:var(--ok)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#1b2a22;color:var(--ok);white-space:nowrap}
   .tag.bad{background:#2a1518;color:var(--bad)}
+  .tag.warn{background:#2a2415;color:var(--warn)}
+  .tag.mute{background:#1a2233;color:var(--muted)}
   .login{max-width:400px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
-  .err{color:var(--bad);min-height:18px;font-size:13px}
-  .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .err{color:var(--bad);min-height:18px;font-size:13px;white-space:pre-wrap}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
   .kpi .panel{padding:12px}.kpi b{display:block;font-size:22px;margin-top:4px}
+  .note{font-size:12.5px;color:var(--muted);line-height:1.7}
+  .policy{border-color:#2f4a68;background:#0f1c2e}
+  .policy ul{margin:6px 0 0;padding-left:18px;line-height:1.8;font-size:12.5px;color:#c9d4ea}
+  .check{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12.5px}
+  .check .d{color:var(--muted)}
+  .audit{max-height:260px;overflow:auto}
+  .side{max-height:430px;overflow:auto}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+  .toolbar .sp{flex:1}
+  .closed-banner{border:1px solid #5c3b1d;background:#2a1d10;color:#ffd7a1;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -55,12 +71,38 @@ createApp({
     const token=ref(localStorage.getItem('slicegate_token')||'');
     const user=ref(localStorage.getItem('slicegate_user')||'');
     const username=ref('admin'), password=ref('123456'), err=ref(''), tab=ref(0), actionErr=ref('');
-    const slices=ref([]), releases=ref([]), watermarks=ref([]);
+    // 页面只缓存展示数据；关日与否一律以服务端快照为准，不写本地标记。
+    const snap=ref({policy:{},day_closes:[],catalog:[],slices:[],releases:[],watermarks:[],audit:[],consistency:{ok:false,checks:[]},counts:{}});
     const form=ref({slice_no:'SL-2026-11-03-east',biz_date:'2026-11-03',partition_key:'east',row_count:1000,expected_count:1000});
-    const releaseSliceId=ref(1), consumer=ref('ads_order');
-    const nav=['切片登记','完整度裁决','下游放行','消费水位'];
+    const releaseSliceId=ref(0), consumer=ref('ads_order');
+    const closeDate=ref(''), closeNote=ref('');
+    const focusDate=ref('');
+    const nav=['关日工作台','切片登记','完整度裁决','下游放行','消费水位','关日审计'];
+    const slices=computed(()=>snap.value.slices||[]);
+    const dayCloses=computed(()=>snap.value.day_closes||[]);
+    const catalog=computed(()=>snap.value.catalog||[]);
+    const releases=computed(()=>snap.value.releases||[]);
+    const watermarks=computed(()=>snap.value.watermarks||[]);
+    const audits=computed(()=>snap.value.audit||[]);
+    const policy=computed(()=>snap.value.policy||{});
+    const checks=computed(()=>((snap.value.consistency||{}).checks)||[]);
+    const counts=computed(()=>snap.value.counts||{});
     const completeCnt=computed(()=>slices.value.filter(s=>s.completeness==='完整').length);
     const openCnt=computed(()=>slices.value.filter(s=>s.release_status!=='已放行').length);
+    const closedDates=computed(()=>new Set(dayCloses.value.map(d=>d.biz_date)));
+    const nowFocus=computed(()=>focusDate.value||(catalog.value[0]?catalog.value[0].biz_date:''));
+    const focusSlices=computed(()=>nowFocus.value?slices.value.filter(s=>s.biz_date===nowFocus.value):[]);
+    const focusReleases=computed(()=>nowFocus.value?releases.value.filter(r=>r.biz_date===nowFocus.value):[]);
+    const focusWatermarks=computed(()=>nowFocus.value?watermarks.value.filter(w=>w.biz_date===nowFocus.value):[]);
+    const focusClose=computed(()=>dayCloses.value.find(d=>d.biz_date===nowFocus.value)||null);
+    const focusRow=computed(()=>catalog.value.find(c=>c.biz_date===nowFocus.value)||null);
+    const selectable=computed(()=>slices.value);
+    const selectedClosed=computed(()=>{
+      const s=slices.value.find(x=>x.id===releaseSliceId.value);
+      return !!(s && closedDates.value.has(s.biz_date));
+    });
+    const gateMode=computed(()=>policy.value.mode||'甲');
+
     function auth(){return {Authorization:'Bearer '+token.value,'Content-Type':'application/json'};}
     async function login(){
       err.value='';
@@ -70,28 +112,69 @@ createApp({
       localStorage.setItem('slicegate_token',j.token); localStorage.setItem('slicegate_user',j.username);
       await refresh();
     }
-    function logout(){token.value='';user.value='';localStorage.removeItem('slicegate_token');localStorage.removeItem('slicegate_user');}
-    async function loadJson(url){
-      const r=await fetch(url,{headers:auth()});
+    function logout(){token.value='';user.value='';snap.value={policy:{},day_closes:[],catalog:[],slices:[],releases:[],watermarks:[],audit:[],consistency:{ok:false,checks:[]},counts:{}};localStorage.removeItem('slicegate_token');localStorage.removeItem('slicegate_user');}
+    async function loadJson(url,opt){
+      const r=await fetch(url,Object.assign({headers:auth()},opt||{}));
       const j=await r.json().catch(()=>({}));
-      if(r.status===401){ logout(); return null; }
+      if(r.status===401){ logout(); return {__err:'登录已失效'}; }
+      if(!r.ok){ return {__err:j.detail||('请求失败 '+r.status)}; }
       return j;
     }
     async function refresh(){
-      if(!token.value) return;
-      const s=await loadJson('/api/slices'); if(s===null) return;
-      slices.value=Array.isArray(s.items)?s.items:[];
-      const rel=await loadJson('/api/releases'); if(rel===null) return;
-      releases.value=Array.isArray(rel.items)?rel.items:[];
-      const w=await loadJson('/api/watermarks'); if(w===null) return;
-      watermarks.value=Array.isArray(w.items)?w.items:[];
-      if(slices.value.length) releaseSliceId.value=slices.value[0].id;
+      if(!token.value) return null;
+      // 单次同库快照：关日列表/业务目录/切片侧栏/策略旁注/放行流水一次读齐。
+      const j=await loadJson('/api/snapshot');
+      if(j.__err){ actionErr.value=j.__err; return null; }
+      snap.value=j;
+      if(!slices.value.some(s=>s.id===releaseSliceId.value)) releaseSliceId.value=slices.value.length?slices.value[0].id:0;
+      if(!focusDate.value && catalog.value.length) focusDate.value=catalog.value[catalog.value.length-1].biz_date;
+      if(!closeDate.value && catalog.value.length) closeDate.value=catalog.value[catalog.value.length-1].biz_date;
+      return j;
     }
-    async function createSlice(){actionErr.value='';const r=await fetch('/api/slices',{method:'POST',headers:auth(),body:JSON.stringify(form.value)});const j=await r.json();if(!r.ok)actionErr.value=j.detail||'失败';await refresh();}
-    async function evaluate(id){await fetch('/api/slices/'+id+'/evaluate',{method:'POST',headers:auth()});await refresh();}
-    async function doRelease(){actionErr.value='';const r=await fetch('/api/slices/'+releaseSliceId.value+'/release',{method:'POST',headers:auth(),body:JSON.stringify({consumer:consumer.value})});const j=await r.json();if(!r.ok)actionErr.value=j.detail||'放行失败';await refresh();}
+    async function createSlice(){
+      actionErr.value='';
+      const r=await fetch('/api/slices',{method:'POST',headers:auth(),body:JSON.stringify(form.value)});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)actionErr.value=j.detail||'失败';
+      focusDate.value=form.value.biz_date;
+      await refresh();
+    }
+    async function evaluate(id){
+      actionErr.value='';
+      const r=await fetch('/api/slices/'+id+'/evaluate',{method:'POST',headers:auth()});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)actionErr.value=j.detail||'裁决失败';
+      await refresh();
+    }
+    async function doRelease(){
+      actionErr.value='';
+      const r=await fetch('/api/slices/'+releaseSliceId.value+'/release',{method:'POST',headers:auth(),body:JSON.stringify({consumer:consumer.value})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)actionErr.value=j.detail||'放行失败';
+      await refresh();
+    }
+    async function closeDay(){
+      actionErr.value='';
+      const payload={biz_date:closeDate.value,mode:gateMode.value,note:closeNote.value};
+      const r=await fetch('/api/day-closes',{method:'POST',headers:auth(),body:JSON.stringify(payload)});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)actionErr.value=j.detail||'关日失败';
+      else { focusDate.value=closeDate.value; closeNote.value=''; }
+      await refresh();
+    }
+    async function tryLateFreeze(){
+      actionErr.value='';
+      const r=await fetch('/api/late-freezes',{method:'POST',headers:auth(),body:JSON.stringify({biz_date:nowFocus.value,reason:'页面迟到冻结登记尝试'})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)actionErr.value=j.detail||'已拒绝';
+      await refresh();
+    }
     onMounted(()=>{if(token.value)refresh();});
-    return {token,user,username,password,err,tab,nav,slices,releases,watermarks,form,releaseSliceId,consumer,actionErr,completeCnt,openCnt,login,logout,createSlice,evaluate,doRelease};
+    return {token,user,username,password,err,tab,nav,form,releaseSliceId,consumer,actionErr,
+      closeDate,closeNote,focusDate,snap,slices,dayCloses,catalog,releases,watermarks,audits,policy,
+      checks,counts,completeCnt,openCnt,closedDates,nowFocus,focusSlices,focusReleases,
+      focusWatermarks,focusClose,focusRow,selectable,selectedClosed,gateMode,
+      login,logout,refresh,createSlice,evaluate,doRelease,closeDay,tryLateFreeze};
   },
   template:`
   <div v-if="!token" class="login">
@@ -103,23 +186,133 @@ createApp({
     <div class="top">
       <div class="brand">日切放行<small>切片 → 完整度 → 放行 → 水位</small></div>
       <div class="tabs"><button v-for="(n,i) in nav" :key="n" :class="{on:tab===i}" @click="tab=i">{{n}}</button></div>
-      <div class="user">{{user}}</div><button class="ghost" @click="logout">退出</button>
+      <div class="user">{{user}} · 口径{{gateMode}}</div><button class="ghost" @click="logout">退出</button>
     </div>
     <main>
       <div class="kpi">
         <div class="panel">切片总数<b class="mono">{{slices.length}}</b></div>
         <div class="panel">已完整<b class="mono">{{completeCnt}}</b></div>
         <div class="panel">未放行<b class="mono">{{openCnt}}</b></div>
+        <div class="panel">已关日<b class="mono">{{counts.closed_days||0}}</b></div>
       </div>
-      <div v-show="tab===0" class="grid">
+      <div class="err" style="margin-bottom:8px">{{actionErr}}</div>
+
+      <!-- 关日工作台 -->
+      <div v-show="tab===0">
+        <div class="cols">
+          <div class="panel policy">
+            <h2>策略旁注 <span class="hint">{{policy.title}}</span></h2>
+            <div class="note">{{policy.body}}</div>
+            <ul>
+              <li>口径：<b>{{policy.mode}}</b>（锁定，当天不许更换）</li>
+              <li>门闩说明：<span class="mono">{{policy.source}}</span></li>
+              <li>关日后：放行 / 水位推进 / 重裁 / 迟到冻结登记一律服务端硬拒绝</li>
+              <li>放行与水位同步闸：放行成功即推进消费水位</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h2>关日列表 <span class="hint">同库</span></h2>
+            <div class="side">
+              <table><thead><tr><th>业务日</th><th>口径</th><th>关日人</th><th>关日时间</th></tr></thead>
+              <tbody>
+                <tr v-for="d in dayCloses" :key="d.id" @click="focusDate=d.biz_date" style="cursor:pointer">
+                  <td class="mono">{{d.biz_date}}</td><td><span class="tag warn">{{d.mode}}</span></td>
+                  <td>{{d.closed_by}}</td><td class="mono">{{d.closed_at}}</td>
+                </tr>
+                <tr v-if="!dayCloses.length"><td colspan="4" class="note">尚无关日记录</td></tr>
+              </tbody></table>
+            </div>
+            <div class="row" style="margin-top:10px">
+              <div><label>关日业务日</label><input v-model="closeDate" placeholder="YYYY-MM-DD"/></div>
+              <div><label>关日口径</label><input :value="gateMode+' 门闩（锁定）'" disabled/></div>
+            </div>
+            <label>关日备注</label><input v-model="closeNote" placeholder="可留空"/>
+            <button class="primary" @click="closeDay">登记关日（服务端裁定）</button>
+          </div>
+          <div class="panel">
+            <h2>业务目录 <span class="hint">同库核对</span></h2>
+            <div class="side">
+              <table><thead><tr><th>业务日</th><th>切片</th><th>完整</th><th>已放行</th><th>关日</th></tr></thead>
+              <tbody>
+                <tr v-for="c in catalog" :key="c.biz_date" @click="focusDate=c.biz_date" style="cursor:pointer">
+                  <td class="mono">{{c.biz_date}}</td><td class="mono">{{c.total}}</td>
+                  <td class="mono">{{c.complete}}</td><td class="mono">{{c.released}}</td>
+                  <td><span class="tag" :class="c.closed?'warn':'mute'">{{c.closed?'已关日':'开放'}}</span></td>
+                </tr>
+                <tr v-if="!catalog.length"><td colspan="5" class="note">暂无业务日</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:14px">
+          <div class="panel">
+            <h2>切片侧栏 <span class="hint">{{nowFocus||'未选业务日'}}</span>
+              <span v-if="focusClose" class="tag warn">该业务日已关日</span>
+              <span v-else class="tag mute">未关日</span>
+            </h2>
+            <div v-if="focusClose" class="closed-banner">
+              关日门闩：{{nowFocus}} 已关日，放行与水位推进硬拒绝，仅允许只读查询。
+            </div>
+            <table><thead><tr><th>切片号</th><th>分区</th><th>实收</th><th>完整度</th><th>放行态</th><th></th></tr></thead>
+            <tbody><tr v-for="s in focusSlices" :key="s.id">
+              <td class="mono">{{s.slice_no}}</td><td>{{s.partition_key}}</td>
+              <td class="mono">{{s.row_count}}/{{s.expected_count}}</td>
+              <td><span class="tag" :class="{bad:s.completeness!=='完整'}">{{s.completeness}}</span></td>
+              <td><span class="tag" :class="s.release_status==='已放行'?'':'mute'">{{s.release_status}}</span></td>
+              <td><button class="ghost" :disabled="!!focusClose" @click="evaluate(s.id)">重裁</button></td>
+            </tr>
+            <tr v-if="!focusSlices.length"><td colspan="6" class="note">该业务日暂无切片</td></tr></tbody></table>
+          </div>
+          <div class="panel">
+            <h2>关日画面 / 放行流水读数 <span class="hint">同一快照对账</span></h2>
+            <table><thead><tr><th>项</th><th>关日画面</th><th>放行流水</th></tr></thead>
+            <tbody>
+              <tr><td>业务日</td><td class="mono">{{nowFocus||'-'}}</td><td class="mono">{{nowFocus||'-'}}</td></tr>
+              <tr><td>切片数</td><td class="mono">{{focusRow?focusRow.total:0}}</td><td class="mono">{{focusSlices.length}}</td></tr>
+              <tr><td>已放行切片</td><td class="mono">{{focusRow?focusRow.released:0}}</td><td class="mono">{{focusReleases.filter(r=>r.status==='成功').length}}</td></tr>
+              <tr><td>关日态</td>
+                <td><span class="tag" :class="focusClose?'warn':'mute'">{{focusClose?'已关日':'开放'}}</span></td>
+                <td><span class="tag" :class="focusClose?'warn':'mute'">{{focusClose?('关日于 '+focusClose.closed_at):'无门闩'}}</span></td>
+              </tr>
+              <tr><td>水位记录</td><td class="mono">—</td><td class="mono">{{focusWatermarks.length}}</td></tr>
+            </tbody></table>
+            <table style="margin-top:10px"><thead><tr><th>切片</th><th>下游</th><th>结果</th><th>时间</th></tr></thead>
+            <tbody><tr v-for="r in focusReleases" :key="r.id">
+              <td class="mono">{{r.slice_no}}</td><td>{{r.consumer}}</td>
+              <td><span class="tag" :class="r.status==='成功'?'':'bad'">{{r.status}}</span></td>
+              <td class="mono">{{r.created_at}}</td>
+            </tr><tr v-if="!focusReleases.length"><td colspan="4" class="note">该业务日暂无放行流水</td></tr></tbody></table>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:14px">
+          <h2>同库一致性核对 <span class="tag" :class="snap.consistency&&snap.consistency.ok?'':'bad'">
+            {{snap.consistency&&snap.consistency.ok?'一致':'存在偏差'}}</span>
+            <span class="hint">读于 {{snap.read_at||'-'}}</span></h2>
+          <div class="check" v-for="k in checks" :key="k.key">
+            <span class="tag" :class="k.ok?'':'bad'">{{k.ok?'通过':'偏差'}}</span>
+            <span>{{k.label}}</span><span class="d">{{k.detail}}</span>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <button class="ghost" @click="tryLateFreeze">尝试乙口径：迟到冻结登记</button>
+            <span class="note">甲门闩下应被拒绝并记“关日口径偏了”。</span>
+            <span class="sp"></span>
+            <button class="ghost" @click="refresh">同库重读</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 切片登记 -->
+      <div v-show="tab===1" class="grid">
         <div class="panel">
-          <h2>在途切片</h2>
+          <h2>在途切片 <span class="hint">同库</span></h2>
           <table><thead><tr><th>切片号</th><th>日/区</th><th>实收</th><th>完整度</th><th></th></tr></thead>
           <tbody><tr v-for="s in slices" :key="s.id">
             <td class="mono">{{s.slice_no}}</td><td>{{s.biz_date}} / {{s.partition_key}}</td>
             <td class="mono">{{s.row_count}}/{{s.expected_count}}</td>
             <td><span class="tag" :class="{bad:s.completeness!=='完整'}">{{s.completeness}}</span></td>
-            <td><button class="ghost" @click="evaluate(s.id)">重裁</button></td>
+            <td><button class="ghost" :disabled="closedDates.has(s.biz_date)" @click="evaluate(s.id)">重裁</button></td>
           </tr></tbody></table>
         </div>
         <div class="panel">
@@ -128,35 +321,67 @@ createApp({
           <div class="row"><div><label>分区</label><input v-model="form.partition_key"/></div><div><label>实收</label><input type="number" v-model.number="form.row_count"/></div></div>
           <label>期望</label><input type="number" v-model.number="form.expected_count"/>
           <button class="primary" @click="createSlice">写入登记</button>
-          <div class="err">{{actionErr}}</div>
+          <div class="note" style="margin-top:8px">已关日业务日的登记与重裁由服务端硬拒绝。</div>
         </div>
       </div>
-      <div v-show="tab===1" class="panel">
+
+      <!-- 完整度裁决 -->
+      <div v-show="tab===2" class="panel">
         <h2>完整度裁决</h2>
-        <table><thead><tr><th>切片</th><th>缺口</th><th>结论</th><th>放行态</th></tr></thead>
+        <table><thead><tr><th>切片</th><th>业务日</th><th>缺口</th><th>结论</th><th>放行态</th><th>关日态</th></tr></thead>
         <tbody><tr v-for="s in slices" :key="'c'+s.id">
-          <td class="mono">{{s.slice_no}}</td><td class="mono">{{Math.max(s.expected_count-s.row_count,0)}}</td>
+          <td class="mono">{{s.slice_no}}</td><td class="mono">{{s.biz_date}}</td>
+          <td class="mono">{{Math.max(s.expected_count-s.row_count,0)}}</td>
           <td>{{s.completeness}}</td><td>{{s.release_status}}</td>
+          <td><span class="tag" :class="closedDates.has(s.biz_date)?'warn':'mute'">{{closedDates.has(s.biz_date)?'已关日':'开放'}}</span></td>
         </tr></tbody></table>
       </div>
-      <div v-show="tab===2" class="grid">
+
+      <!-- 下游放行 -->
+      <div v-show="tab===3" class="grid">
         <div class="panel">
           <h2>申请放行</h2>
-          <label>切片</label><select v-model.number="releaseSliceId"><option v-for="s in slices" :value="s.id">{{s.slice_no}}（{{s.completeness}}）</option></select>
+          <label>切片</label>
+          <select v-model.number="releaseSliceId">
+            <option v-for="s in selectable" :key="s.id" :value="s.id">{{s.slice_no}}（{{s.completeness}} · {{s.biz_date}}）</option>
+          </select>
           <label>下游</label><input v-model="consumer"/>
+          <div v-if="selectedClosed" class="closed-banner">该切片业务日已关日，服务端将硬拒绝放行与水位推进。</div>
           <button class="primary" @click="doRelease">放行</button>
-          <div class="err">{{actionErr}}</div>
+          <div class="note" style="margin-top:8px">关日仅由服务端库内记录裁定，页面不缓存关日标记。</div>
         </div>
         <div class="panel">
           <h2>放行流水</h2>
-          <table><thead><tr><th>切片</th><th>下游</th><th>结果</th><th>时间</th></tr></thead>
-          <tbody><tr v-for="r in releases" :key="r.id"><td class="mono">{{r.slice_no}}</td><td>{{r.consumer}}</td><td>{{r.status}}</td><td class="mono">{{r.created_at}}</td></tr></tbody></table>
+          <div class="side">
+            <table><thead><tr><th>切片</th><th>业务日</th><th>下游</th><th>结果</th><th>时间</th></tr></thead>
+            <tbody><tr v-for="r in releases" :key="r.id"><td class="mono">{{r.slice_no}}</td><td class="mono">{{r.biz_date}}</td>
+              <td>{{r.consumer}}</td><td><span class="tag" :class="r.status==='成功'?'':'bad'">{{r.status}}</span></td>
+              <td class="mono">{{r.created_at}}</td></tr></tbody></table>
+          </div>
         </div>
       </div>
-      <div v-show="tab===3" class="panel">
+
+      <!-- 消费水位 -->
+      <div v-show="tab===4" class="panel">
         <h2>消费水位</h2>
-        <table><thead><tr><th>消费方</th><th>业务日</th><th>水位</th><th>来源切片</th></tr></thead>
-        <tbody><tr v-for="w in watermarks" :key="w.id"><td>{{w.consumer}}</td><td>{{w.biz_date}}</td><td class="mono">{{w.watermark}}</td><td class="mono">{{w.source_slice}}</td></tr></tbody></table>
+        <table><thead><tr><th>消费方</th><th>业务日</th><th>水位</th><th>来源切片</th><th>关日态</th></tr></thead>
+        <tbody><tr v-for="w in watermarks" :key="w.id"><td>{{w.consumer}}</td><td class="mono">{{w.biz_date}}</td>
+          <td class="mono">{{w.watermark}}</td><td class="mono">{{w.source_slice}}</td>
+          <td><span class="tag" :class="closedDates.has(w.biz_date)?'warn':'mute'">{{closedDates.has(w.biz_date)?'关日后未推进':'开放'}}</span></td>
+        </tr></tbody></table>
+      </div>
+
+      <!-- 关日审计 -->
+      <div v-show="tab===5" class="panel">
+        <h2>关日审计 <span class="hint">拒绝与争用同样留痕</span></h2>
+        <div class="side" style="max-height:520px">
+          <table><thead><tr><th>时间</th><th>业务日</th><th>动作</th><th>值班</th><th>结果</th><th>说明</th></tr></thead>
+          <tbody><tr v-for="a in audits" :key="a.id">
+            <td class="mono">{{a.created_at}}</td><td class="mono">{{a.biz_date}}</td><td>{{a.action}}</td>
+            <td>{{a.actor}}</td><td><span class="tag" :class="a.result==='成功'?'':'bad'">{{a.result}}</span></td>
+            <td class="note">{{a.note}}</td>
+          </tr><tr v-if="!audits.length"><td colspan="6" class="note">暂无审计记录</td></tr></tbody></table>
+        </div>
       </div>
     </main>
   </div>`
